@@ -402,6 +402,22 @@ SbKeyModifiers KeyCodeToSbKeyModifiers(uint16_t code) {
   return kSbKeyModifiersNone;
 }
 
+// Workaround for RDK's intentional key remapping: restore original key codes.
+bool RestoreSpecificKeyCodes(unsigned int& code) {
+  switch (code) {
+    case KEY_KP8:
+    case KEY_H:
+      code = KEY_CHANNELUP;
+      return true;
+    case KEY_KP9:
+    case KEY_I:
+      code = KEY_CHANNELDOWN;
+      return true;
+  }
+
+  return false;
+}
+
 }  // namespace
 
 EssInput::EssInput() : key_repeat_interval_(kKeyHoldTime) {
@@ -480,6 +496,16 @@ void EssInput::OnKeyboardKey(unsigned int key, SbInputEventType type) {
   if (UpdateModifiers(key, type))
     return;
 
+  static bool enable_key_debug = !!getenv("COBALT_ENABLE_KEY_DEBUG");
+  if (type == kSbInputEventTypePress || type == kSbInputEventTypeUnpress) {
+    auto saved = key;
+    if (RestoreSpecificKeyCodes(key)) {
+      if (enable_key_debug) {
+        SB_LOG(INFO) << "Restored key code from " << saved << " to " << key;
+      }
+    }
+  }
+
   unsigned int modifiers = key_modifiers_;
   LinuxKeyMapping::MapKeyCodeAndModifiers(key, modifiers);
 
@@ -490,7 +516,6 @@ void EssInput::OnKeyboardKey(unsigned int key, SbInputEventType type) {
   if (type == kSbInputEventTypePress && repeatable && key == key_repeat_key_ && key_repeat_state_)
     return;
 
-  static bool enable_key_debug = !!getenv("COBALT_ENABLE_KEY_DEBUG");
   if (enable_key_debug) {
     SB_LOG(INFO) << "OnKeyboardKey, key code = " << key
                  << ", type = " << type
